@@ -1,0 +1,7 @@
+covertage.*
+.idea
+.vscode
+.env
+
+/logs
+*.log
