@@ -1,7 +1,7 @@
 package api
 
 import (
-	"job4j_go_share_trip_notification/internal/domain/notification/handler"
+	"job4j_go_share_trip_notification/internal/api/handler"
 	"job4j_go_share_trip_notification/internal/domain/notification/repository"
 	"job4j_go_share_trip_notification/internal/domain/notification/service"
 
