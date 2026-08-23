@@ -1,4 +1,4 @@
-package handler
+package api
 
 import "job4j_go_share_trip_notification/internal/domain/notification/service"
 

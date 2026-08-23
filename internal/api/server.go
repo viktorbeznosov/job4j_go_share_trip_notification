@@ -1,7 +1,6 @@
 package api
 
 import (
-	"job4j_go_share_trip_notification/internal/api/handler"
 	"job4j_go_share_trip_notification/internal/domain/notification/repository"
 	"job4j_go_share_trip_notification/internal/domain/notification/service"
 
@@ -9,7 +8,7 @@ import (
 )
 
 type Server struct{
-    NotificationHandler *handler.NotificationHandler
+    NotificationHandler *NotificationHandler
 }
 
 func NewServer(pgxpool *pgxpool.Pool) *Server {
@@ -18,6 +17,6 @@ func NewServer(pgxpool *pgxpool.Pool) *Server {
     )
 
 	return &Server{
-        NotificationHandler: handler.NewNotificationHandler(notificationService),
+        NotificationHandler: NewNotificationHandler(notificationService),
 	}
 }

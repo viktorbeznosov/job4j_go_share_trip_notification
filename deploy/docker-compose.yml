@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16
-    container_name: pg
+    container_name: pg_notification
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
@@ -9,8 +9,8 @@ services:
     ports:
       - "6544:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata_notification:/var/lib/postgresql/data
     restart: unless-stopped
 
 volumes:
-  pgdata:
+  pgdata_notification:
