@@ -9,9 +9,11 @@ type ReadyResponse struct {
 	Ready  bool   `json:"ready"`
 }
 
-func (s *Server) Ready(c *fiber.Ctx) error {
+func(h *NotificationHandler) Ready(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(ReadyResponse{
 		Status: "Success",
 		Ready:  true,
 	})
 }
+
+
