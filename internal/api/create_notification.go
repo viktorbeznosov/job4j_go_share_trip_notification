@@ -1,10 +1,10 @@
 package api
 
 import (
-	"encoding/json"
 	"job4j_go_share_trip_notification/internal/domain/notification/handler/request"
 	"job4j_go_share_trip_notification/internal/domain/notification/handler/response"
-	"log"
+	"job4j_go_share_trip_notification/internal/observably/logctx"
+	"log/slog"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -12,6 +12,12 @@ import (
 
 func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
 	var req request.CreateNotificationRequest
+
+    ctx := c.UserContext()
+
+	logger := logctx.Logger(ctx).With(
+		slog.String("handler", "CreateNotification"),
+	)
 
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -39,12 +45,14 @@ func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
     }
 
     if len(req.Payload) == 0 || string(req.Payload) == "null" {
-        req.Payload = json.RawMessage(`{}`)
+        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+            "error": "payload must not be empty.",
+        })
     }
 
 	notification, err := h.NotificationService.Create(c.Context(), req.RecipientID, req.Type, req.Payload)
 	if err != nil {
-	    log.Println("failed to create notification", err.Error())
+	    logger.Warn("failed to create notification", slog.Any("error", err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to create notification",
 		})
