@@ -13,7 +13,7 @@ import (
 func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
 	var req request.CreateNotificationRequest
 
-    ctx := c.UserContext()
+	ctx := c.UserContext()
 
 	logger := logctx.Logger(ctx).With(
 		slog.String("handler", "CreateNotification"),
@@ -38,21 +38,21 @@ func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
 		})
 	}
 
-    if !req.Type.IsValid() {
+	if !req.Type.IsValid() {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "type is invalid",
 		})
-    }
+	}
 
-    if len(req.Payload) == 0 || string(req.Payload) == "null" {
-        return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-            "error": "payload must not be empty.",
-        })
-    }
+	if len(req.Payload) == 0 || string(req.Payload) == "null" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "payload must not be empty.",
+		})
+	}
 
 	notification, err := h.NotificationService.Create(c.Context(), req.RecipientID, req.Type, req.Payload)
 	if err != nil {
-	    logger.Warn("failed to create notification", slog.Any("error", err))
+		logger.Warn("failed to create notification", slog.Any("error", err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "failed to create notification",
 		})
@@ -67,4 +67,3 @@ func (h *NotificationHandler) CreateNotification(c *fiber.Ctx) error {
 		CreatedAt:   time.Now().String(),
 	})
 }
-

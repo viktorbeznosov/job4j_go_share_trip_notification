@@ -41,5 +41,3 @@ func (h *NotificationHandler) GetNotification(c *fiber.Ctx) error {
 		CreatedAt:   time.Now().String(),
 	})
 }
-
-

@@ -1,4 +1,3 @@
-// internal/api/get_notification_by_id_test.go
 package api
 
 import (
@@ -16,7 +15,10 @@ import (
 )
 
 func TestGetNotificationByID(t *testing.T) {
+	t.Parallel()
+
 	t.Run("success - получение уведомления по ID", func(t *testing.T) {
+		t.Parallel()
 		recipientID := uuid.New().String()
 		createPayload := request.CreateNotificationRequest{
 			RecipientID: recipientID,
@@ -38,12 +40,12 @@ func TestGetNotificationByID(t *testing.T) {
 		createResp, err := testApp.Test(createReq, -1)
 		require.NoError(t, err)
 
-        defer func() {
-            err := createResp.Body.Close()
-            if err != nil {
-                t.Errorf("failed to close response body: %v", err)
-            }
-        }()
+		defer func() {
+			err := createResp.Body.Close()
+			if err != nil {
+				t.Errorf("failed to close response body: %v", err)
+			}
+		}()
 
 		assert.Equal(t, http.StatusCreated, createResp.StatusCode)
 
@@ -61,12 +63,12 @@ func TestGetNotificationByID(t *testing.T) {
 		getResp, err := testApp.Test(getReq, -1)
 		require.NoError(t, err)
 
-        defer func() {
-            err := getResp.Body.Close()
-            if err != nil {
-                t.Errorf("failed to close response body: %v", err)
-            }
-        }()
+		defer func() {
+			err := getResp.Body.Close()
+			if err != nil {
+				t.Errorf("failed to close response body: %v", err)
+			}
+		}()
 
 		assert.Equal(t, http.StatusOK, getResp.StatusCode)
 
@@ -81,6 +83,7 @@ func TestGetNotificationByID(t *testing.T) {
 	})
 
 	t.Run("error - невалидный UUID", func(t *testing.T) {
+		t.Parallel()
 		req, err := http.NewRequest(
 			http.MethodGet,
 			"/notification/invalid-uuid",
@@ -91,12 +94,12 @@ func TestGetNotificationByID(t *testing.T) {
 		resp, err := testApp.Test(req, -1)
 		require.NoError(t, err)
 
-        defer func() {
-            err := resp.Body.Close()
-            if err != nil {
-                t.Errorf("failed to close response body: %v", err)
-            }
-        }()
+		defer func() {
+			err := resp.Body.Close()
+			if err != nil {
+				t.Errorf("failed to close response body: %v", err)
+			}
+		}()
 
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
@@ -107,6 +110,7 @@ func TestGetNotificationByID(t *testing.T) {
 	})
 
 	t.Run("error - уведомление не найдено", func(t *testing.T) {
+		t.Parallel()
 		nonExistentID := uuid.New().String()
 
 		req, err := http.NewRequest(
@@ -119,12 +123,12 @@ func TestGetNotificationByID(t *testing.T) {
 		resp, err := testApp.Test(req, -1)
 		require.NoError(t, err)
 
-        defer func() {
-            err := resp.Body.Close()
-            if err != nil {
-                t.Errorf("failed to close response body: %v", err)
-            }
-        }()
+		defer func() {
+			err := resp.Body.Close()
+			if err != nil {
+				t.Errorf("failed to close response body: %v", err)
+			}
+		}()
 
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 
@@ -135,6 +139,7 @@ func TestGetNotificationByID(t *testing.T) {
 	})
 
 	t.Run("success - проверка данных в БД", func(t *testing.T) {
+		t.Parallel()
 		recipientID := uuid.New().String()
 		createPayload := request.CreateNotificationRequest{
 			RecipientID: recipientID,
@@ -156,12 +161,12 @@ func TestGetNotificationByID(t *testing.T) {
 		createResp, err := testApp.Test(createReq, -1)
 		require.NoError(t, err)
 
-        defer func() {
-            err := createResp.Body.Close()
-            if err != nil {
-                t.Errorf("failed to close response body: %v", err)
-            }
-        }()
+		defer func() {
+			err := createResp.Body.Close()
+			if err != nil {
+				t.Errorf("failed to close response body: %v", err)
+			}
+		}()
 
 		assert.Equal(t, http.StatusCreated, createResp.StatusCode)
 
@@ -179,12 +184,12 @@ func TestGetNotificationByID(t *testing.T) {
 		getResp, err := testApp.Test(getReq, -1)
 		require.NoError(t, err)
 
-        defer func() {
-            err := getResp.Body.Close()
-            if err != nil {
-                t.Errorf("failed to close response body: %v", err)
-            }
-        }()
+		defer func() {
+			err := getResp.Body.Close()
+			if err != nil {
+				t.Errorf("failed to close response body: %v", err)
+			}
+		}()
 
 		assert.Equal(t, http.StatusOK, getResp.StatusCode)
 
@@ -204,7 +209,7 @@ func TestGetNotificationByID(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, dbRecipientID, got.RecipientID)
-        assert.Equal(t, dbType, string(got.Type))
-        assert.Equal(t, dbStatus, string(got.Status))
+		assert.Equal(t, dbType, string(got.Type))
+		assert.Equal(t, dbStatus, string(got.Status))
 	})
 }

@@ -1,9 +1,12 @@
 package config
 
+import "strings"
+
 type AppConfig struct {
 	App      AppConfigSection
 	Database DatabaseConfigSection
 	Server   ServerConfigSection
+	Kafka    KafkaConfigSection
 }
 
 type AppConfigSection struct {
@@ -27,6 +30,12 @@ type ServerConfigSection struct {
 	Port int `json:"port"`
 }
 
+type KafkaConfigSection struct {
+	Brokers []string `json:"brokers"`
+	Topic   string   `json:"topic"`
+	GroupID string   `json:"groupId"`
+}
+
 func GetAppConfig() AppConfig {
 	return AppConfig{
 		App: AppConfigSection{
@@ -47,5 +56,22 @@ func GetAppConfig() AppConfig {
 		Server: ServerConfigSection{
 			Port: EnvInt("SERVER_PORT", 8080),
 		},
+		Kafka: KafkaConfigSection{
+			Brokers: splitCSV(Env("KAFKA_BROKERS", "localhost:9092")),
+			Topic:   Env("KAFKA_TOPIC", "trip.events"),
+			GroupID: Env("KAFKA_GROUP_ID", "share-trip-notification"),
+		},
 	}
+}
+
+func splitCSV(raw string) []string {
+	parts := strings.Split(raw, ",")
+	values := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			values = append(values, part)
+		}
+	}
+	return values
 }

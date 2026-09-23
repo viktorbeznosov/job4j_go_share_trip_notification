@@ -8,10 +8,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"job4j_go_share_trip_notification/internal/domain/notification/entity"
 )
+
+type executor interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
 
 var (
 	ErrNotificationNotFound = errors.New("notification not found")
@@ -26,12 +31,28 @@ func NewNotificationRepository(db *pgxpool.Pool) *NotificationRepository {
 }
 
 func (r *NotificationRepository) Create(ctx context.Context, n *entity.Notification) error {
+	return r.insert(ctx, r.db, n)
+}
+
+func (r *NotificationRepository) CreateTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	n *entity.Notification,
+) error {
+	return r.insert(ctx, tx, n)
+}
+
+func (r *NotificationRepository) insert(
+	ctx context.Context,
+	exec executor,
+	n *entity.Notification,
+) error {
 	query := `
 		INSERT INTO notifications (id, recipient_id, type, status, payload, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
-	_, err := r.db.Exec(ctx, query,
+	_, err := exec.Exec(ctx, query,
 		n.ID,
 		n.RecipientID,
 		string(n.Type),

@@ -7,16 +7,16 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Server struct{
-    NotificationHandler *NotificationHandler
+type Server struct {
+	NotificationHandler *NotificationHandler
 }
 
 func NewServer(pgxpool *pgxpool.Pool) *Server {
-    notificationService := service.NewNotificationService(
-        *repository.NewNotificationRepository(pgxpool),
-    )
+	notificationService := service.NewNotificationService(
+		*repository.NewNotificationRepository(pgxpool),
+	)
 
 	return &Server{
-        NotificationHandler: NewNotificationHandler(notificationService),
+		NotificationHandler: NewNotificationHandler(notificationService),
 	}
 }

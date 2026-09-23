@@ -2,13 +2,19 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"job4j_go_share_trip_notification/config"
 	"job4j_go_share_trip_notification/internal/api"
 	"job4j_go_share_trip_notification/internal/app"
+	"job4j_go_share_trip_notification/internal/domain/notification/repository"
+	"job4j_go_share_trip_notification/internal/events"
 	"job4j_go_share_trip_notification/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
@@ -16,14 +22,18 @@ import (
 )
 
 func main() {
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
 
-	// Загружаем .env файл
 	if err := godotenv.Load("./.env"); err != nil {
 		log.Println("No .env file found, using system environment variables")
 	}
 
-    cfg := config.GetAppConfig()
+	cfg := config.GetAppConfig()
 
 	storageCfg := storage.Config{
 		Host:     cfg.Database.Host,
@@ -34,20 +44,15 @@ func main() {
 		SSLMode:  cfg.Database.SSLMode,
 	}
 
-    logger, logFile, err := app.NewLogger()
-    if err != nil {
-        panic(err)
-    }
+	logger, logFile, err := app.NewLogger()
+	if err != nil {
+		panic(err)
+	}
 	defer func() {
 		if err := logFile.Close(); err != nil {
 			log.Printf("failed to close log file: %v", err)
 		}
 	}()
-
-    if err != nil {
-        logger.Error("init tracing failed", "error", err)
-        os.Exit(1)
-    }
 
 	pool, err := storage.NewPool(ctx, storageCfg.DSN())
 	if err != nil {
@@ -57,12 +62,53 @@ func main() {
 
 	server := api.NewServer(pool)
 
-	app := fiber.New()
+	fiberApp := fiber.New()
+	server.Route(fiberApp.Group("/api"))
 
-	server.Route(app.Group("/api"))
+	consumer := events.NewConsumer(
+		cfg.Kafka.Brokers,
+		cfg.Kafka.Topic,
+		cfg.Kafka.GroupID,
+	)
+	defer func() {
+		if err := consumer.Close(); err != nil {
+			logger.Error("failed to close kafka consumer", "error", err)
+		}
+	}()
 
-	err = app.Listen(fmt.Sprintf(":%d", cfg.Server.Port))
-	if err != nil {
-		log.Fatal(err)
+	processor := events.NewProcessor(
+		pool,
+		repository.NewNotificationRepository(pool),
+		repository.NewProcessedEventRepository(),
+	)
+
+	go func() {
+		logger.Info(
+			"kafka consumer started",
+			"brokers", cfg.Kafka.Brokers,
+			"topic", cfg.Kafka.Topic,
+			"group_id", cfg.Kafka.GroupID,
+		)
+		if err := consumer.Run(ctx, processor.Handle); err != nil &&
+			!errors.Is(err, context.Canceled) {
+			logger.Error("kafka consumer stopped", "error", err)
+			stop()
+		}
+	}()
+
+	go func() {
+		addr := fmt.Sprintf(":%d", cfg.Server.Port)
+		if err := fiberApp.Listen(addr); err != nil {
+			logger.Error("http server stopped", "error", err)
+			stop()
+		}
+	}()
+
+	<-ctx.Done()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := fiberApp.ShutdownWithContext(shutdownCtx); err != nil {
+		logger.Error("http server shutdown failed", "error", err)
 	}
 }
