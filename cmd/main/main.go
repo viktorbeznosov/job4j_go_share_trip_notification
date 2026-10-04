@@ -15,10 +15,12 @@ import (
 	"job4j_go_share_trip_notification/internal/app"
 	"job4j_go_share_trip_notification/internal/domain/notification/repository"
 	"job4j_go_share_trip_notification/internal/events"
+	"job4j_go_share_trip_notification/internal/observability/metrics"
 	"job4j_go_share_trip_notification/internal/storage"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func main() {
@@ -60,7 +62,10 @@ func main() {
 	}
 	defer pool.Close()
 
-	server := api.NewServer(pool)
+	registry := prometheus.NewRegistry()
+	m := metrics.New(registry)
+
+	server := api.NewServerWithRegistry(pool, registry)
 
 	fiberApp := fiber.New()
 	server.Route(fiberApp.Group("/api"))
@@ -80,6 +85,7 @@ func main() {
 		pool,
 		repository.NewNotificationRepository(pool),
 		repository.NewProcessedEventRepository(),
+		m,
 	)
 
 	go func() {

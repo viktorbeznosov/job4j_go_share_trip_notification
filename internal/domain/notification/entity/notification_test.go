@@ -27,6 +27,6 @@ func TestTypeIsValid(t *testing.T) {
 	t.Parallel()
 
 	assert.True(t, TypeTripPublished.IsValid())
-	assert.True(t, TypeTripCreated.IsValid())
+	assert.True(t, TypeTripStarted.IsValid())
 	assert.False(t, Type("unknown").IsValid())
 }

@@ -10,9 +10,9 @@ import (
 type Status string
 
 const (
-	StatusCreated  Status = "created"
-	StatusSent     Status = "sent"
-	StatusFailed   Status = "failed"
+	StatusCreated Status = "created"
+	StatusSent    Status = "sent"
+	StatusFailed  Status = "failed"
 )
 
 type Type string
@@ -20,6 +20,7 @@ type Type string
 const (
 	TypeTripPublished Type = "trip_published"
 	TypeTripCreated   Type = "trip_created"
+	TypeTripStarted   Type = "trip_started"
 )
 
 type Notification struct {
@@ -45,6 +46,7 @@ func NewNotification(recipientID string, notificationType Type, payload json.Raw
 var ValidTypes = map[Type]bool{
 	TypeTripPublished: true,
 	TypeTripCreated:   true,
+	TypeTripStarted:   true,
 }
 
 func (t Type) IsValid() bool {

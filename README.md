@@ -249,6 +249,15 @@ HTTP-слой, который принимает запросы к `/notificatio
 - добавить retry-политику;
 - расширить API и версионирование контракта.
 
+## Как расследовать: уведомление не пришло
+
+1. Взять `event_id` из Kafka headers или payload.
+2. Найти лог `operation=ConsumeTripPublished` с `correlation_id`, `causation_id`, `trace_id`.
+3. Inbox: `operation=InboxInsert` — `created` или `duplicate`.
+4. Отправка: `operation=SendNotification`, метрики `notification_consume_total`, `notification_inbox_duplicate_total`, `notification_send_total`.
+
+Полный порядок расследования — в README ShareTrip, раздел «Как расследовать: уведомление не пришло».
+
 ## Кратко
 
 Этот сервис — базовый микросервис уведомлений для ShareTrip. Сейчас он хранит уведомления и предоставляет минимальный контракт, а в будущем сможет стать точкой интеграции с внешними каналами доставки.

@@ -15,8 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"job4j_go_share_trip_notification/internal/domain/notification/entity"
 	"job4j_go_share_trip_notification/internal/domain/notification/repository"
+	"job4j_go_share_trip_notification/internal/observability/metrics"
 )
 
 var testPool *pgxpool.Pool
@@ -85,6 +88,7 @@ func newTestProcessor() *Processor {
 		testPool,
 		repository.NewNotificationRepository(testPool),
 		repository.NewProcessedEventRepository(),
+		metrics.New(prometheus.NewRegistry()),
 	)
 }
 
@@ -121,6 +125,33 @@ func TestProcessor_CreatesNotification(t *testing.T) {
 	).Scan(&processedCount)
 	require.NoError(t, err)
 	assert.Equal(t, 1, processedCount)
+}
+
+func TestProcessor_CreatesTripStartedNotification(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	processor := newTestProcessor()
+
+	event := TripPublished{
+		EventID:       "event-started-1",
+		EventType:     EventTypeTripStarted,
+		TripID:        "trip-started-1",
+		DriverID:      "driver-started-1",
+		CorrelationID: "corr-started",
+		CausationID:   "req-started",
+	}
+
+	err := processor.Handle(ctx, event)
+	require.NoError(t, err)
+
+	var notificationCount int
+	err = testPool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+		event.DriverID,
+		string(entity.TypeTripStarted),
+	).Scan(&notificationCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, notificationCount)
 }
 
 func TestProcessor_IsIdempotentByEventID(t *testing.T) {

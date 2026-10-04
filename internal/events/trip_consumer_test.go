@@ -76,11 +76,49 @@ func TestConsumer_CommitsAfterSuccessfulTripPublished(t *testing.T) {
 	require.Len(t, reader.commits, 1)
 }
 
+func TestConsumer_AppliesKafkaHeadersToEvent(t *testing.T) {
+	t.Parallel()
+	event := TripPublished{
+		EventID:   "payload-event",
+		EventType: EventTypeTripPublished,
+		TripID:    "trip-headers",
+		DriverID:  "driver-headers",
+	}
+	body, err := json.Marshal(event)
+	require.NoError(t, err)
+
+	reader := &stubReader{
+		messages: []kafka.Message{{
+			Value: body,
+			Headers: []kafka.Header{
+				{Key: HeaderEventID, Value: []byte("header-event")},
+				{Key: HeaderCorrelationID, Value: []byte("corr-1")},
+				{Key: HeaderCausationID, Value: []byte("cause-1")},
+				{Key: HeaderTraceparent, Value: []byte("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")},
+			},
+		}},
+	}
+	consumer := &Consumer{reader: reader}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err = consumer.Run(ctx, func(_ context.Context, got TripPublished) error {
+		assert.Equal(t, "header-event", got.EventID)
+		assert.Equal(t, "corr-1", got.CorrelationID)
+		assert.Equal(t, "cause-1", got.CausationID)
+		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", TraceIDFromParent(got.Traceparent))
+		return nil
+	})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
 func TestConsumer_SkipsNonTripPublishedAndCommits(t *testing.T) {
 	t.Parallel()
 	event := TripPublished{
 		EventID:   "evt-2",
-		EventType: EventTypeTripStarted,
+		EventType: EventType("trip_cancelled"),
 		TripID:    "trip-2",
 	}
 	body, err := json.Marshal(event)
@@ -102,6 +140,46 @@ func TestConsumer_SkipsNonTripPublishedAndCommits(t *testing.T) {
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Equal(t, 0, handled)
+	require.Len(t, reader.commits, 1)
+}
+
+func TestConsumer_HandlesTripStarted(t *testing.T) {
+	t.Parallel()
+	event := TripPublished{
+		EventID:   "evt-started",
+		EventType: EventTypeTripStarted,
+		TripID:    "trip-started",
+		DriverID:  "driver-started",
+	}
+	body, err := json.Marshal(event)
+	require.NoError(t, err)
+
+	reader := &stubReader{
+		messages: []kafka.Message{{
+			Value: body,
+			Headers: []kafka.Header{
+				{Key: HeaderCorrelationID, Value: []byte("corr-start")},
+				{Key: HeaderCausationID, Value: []byte("req-start")},
+			},
+		}},
+	}
+	consumer := &Consumer{reader: reader}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	handled := 0
+	err = consumer.Run(ctx, func(_ context.Context, got TripPublished) error {
+		handled++
+		assert.Equal(t, EventTypeTripStarted, got.EventType)
+		assert.Equal(t, "evt-started", got.EventID)
+		assert.Equal(t, "corr-start", got.CorrelationID)
+		assert.Equal(t, "req-start", got.CausationID)
+		return nil
+	})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Equal(t, 1, handled)
 	require.Len(t, reader.commits, 1)
 }
 

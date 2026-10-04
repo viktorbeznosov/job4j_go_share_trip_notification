@@ -18,12 +18,15 @@ const (
 )
 
 type TripPublished struct {
-	EventID    string    `json:"event_id"`
-	EventType  EventType `json:"event_type"`
-	TripID     string    `json:"trip_id"`
-	DriverID   string    `json:"driver_id"`
-	CompanyID  string    `json:"company_id"`
-	OccurredAt time.Time `json:"occurred_at"`
+	EventID       string    `json:"event_id"`
+	EventType     EventType `json:"event_type"`
+	TripID        string    `json:"trip_id"`
+	DriverID      string    `json:"driver_id"`
+	CompanyID     string    `json:"company_id"`
+	CorrelationID string    `json:"correlation_id,omitempty"`
+	CausationID   string    `json:"causation_id,omitempty"`
+	Traceparent   string    `json:"traceparent,omitempty"`
+	OccurredAt    time.Time `json:"occurred_at"`
 }
 
 type messageReader interface {
@@ -84,17 +87,39 @@ func (c *Consumer) process(
 		return c.commit(ctx, msg)
 	}
 
-	if event.EventType != EventTypeTripPublished {
+	applyMetadata(&event, metadataFromHeaders(msg))
+
+	if event.EventType != EventTypeTripPublished && event.EventType != EventTypeTripStarted {
 		slog.Info("skip unsupported event type",
+			slog.String("service", "notification"),
+			slog.String("operation", "ConsumeTripEvent"),
 			slog.String("event_type", string(event.EventType)),
+			slog.String("event_id", event.EventID),
+			slog.String("correlation_id", event.CorrelationID),
 		)
 		return c.commit(ctx, msg)
 	}
 
+	operation := consumeOperation(event.EventType)
+	slog.Info("consume trip event started",
+		slog.String("service", "notification"),
+		slog.String("operation", operation),
+		slog.String("event_id", event.EventID),
+		slog.String("correlation_id", event.CorrelationID),
+		slog.String("causation_id", event.CausationID),
+		slog.String("trace_id", TraceIDFromParent(event.Traceparent)),
+		slog.String("result", "started"),
+	)
+
 	for {
 		if err := handler(ctx, event); err != nil {
 			slog.Error("failed to process trip event",
+				slog.String("service", "notification"),
+				slog.String("operation", operation),
 				slog.String("event_id", event.EventID),
+				slog.String("correlation_id", event.CorrelationID),
+				slog.String("causation_id", event.CausationID),
+				slog.String("trace_id", TraceIDFromParent(event.Traceparent)),
 				slog.Any("error", err),
 			)
 			if !sleep(ctx, time.Second) {
@@ -118,6 +143,13 @@ func (c *Consumer) commit(ctx context.Context, msg kafka.Message) error {
 
 func (c *Consumer) Close() error {
 	return c.reader.Close()
+}
+
+func consumeOperation(eventType EventType) string {
+	if eventType == EventTypeTripStarted {
+		return "ConsumeTripStarted"
+	}
+	return "ConsumeTripPublished"
 }
 
 func sleep(ctx context.Context, d time.Duration) bool {
