@@ -127,6 +127,36 @@ func TestProcessor_CreatesNotification(t *testing.T) {
 	assert.Equal(t, 1, processedCount)
 }
 
+func TestProcessor_CreatesTripPreapprovedNotification(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	processor := newTestProcessor()
+
+	event := TripPublished{
+		EventID:       "event-preapproved-1",
+		EventType:     EventTypeTripPreapproved,
+		TripID:        "trip-preapproved-1",
+		DriverID:      "driver-preapproved-1",
+		CompanyID:     "company-preapproved-1",
+		CorrelationID: "corr-preapproved",
+		CausationID:   "req-preapproved",
+		Traceparent:   "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+		OccurredAt:    time.Now().UTC().Truncate(time.Second),
+	}
+
+	err := processor.Handle(ctx, event)
+	require.NoError(t, err)
+
+	var notificationCount int
+	err = testPool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+		event.DriverID,
+		string(entity.TypeTripPreapproved),
+	).Scan(&notificationCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, notificationCount)
+}
+
 func TestProcessor_CreatesTripStartedNotification(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -185,6 +215,220 @@ func TestProcessor_IsIdempotentByEventID(t *testing.T) {
 	).Scan(&processedCount)
 	require.NoError(t, err)
 	assert.Equal(t, 1, processedCount)
+}
+
+func TestProcessor_CreatesTripCanceledNotificationsForPassengers(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	processor := newTestProcessor()
+
+	event := TripPublished{
+		EventID:      "event-canceled-1",
+		EventType:    EventTypeTripCanceled,
+		TripID:       "trip-canceled-1",
+		DriverID:     "driver-canceled-1",
+		PassengerIDs: []string{"passenger-a", "passenger-b", "passenger-a"},
+	}
+
+	require.NoError(t, processor.Handle(ctx, event))
+
+	var driverCount int
+	err := testPool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+		event.DriverID,
+		string(entity.TypeTripCanceled),
+	).Scan(&driverCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, driverCount)
+
+	for _, passenger := range []string{"passenger-a", "passenger-b"} {
+		var count int
+		err = testPool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+			passenger,
+			string(entity.TypeTripCanceled),
+		).Scan(&count)
+		require.NoError(t, err)
+		assert.Equal(t, 1, count)
+	}
+}
+
+func TestProcessor_CreatesRequestPreconfirmedNotificationForDriver(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	processor := newTestProcessor()
+
+	event := TripPublished{
+		EventID:     "event-request-preconfirmed-1",
+		EventType:   EventTypeRequestPreconfirmed,
+		RequestID:   "request-preconfirmed-1",
+		PassengerID: "passenger-preconfirmed-1",
+		DriverID:    "driver-preconfirmed-1",
+		TripID:      "trip-preconfirmed-1",
+	}
+
+	require.NoError(t, processor.Handle(ctx, event))
+
+	var driverCount int
+	err := testPool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+		event.DriverID,
+		string(entity.TypeRequestPreconfirmed),
+	).Scan(&driverCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, driverCount)
+
+	var passengerCount int
+	err = testPool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+		event.PassengerID,
+		string(entity.TypeRequestPreconfirmed),
+	).Scan(&passengerCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, passengerCount)
+}
+
+func TestProcessor_CreatesRequestConfirmedNotificationForPassenger(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	processor := newTestProcessor()
+
+	event := TripPublished{
+		EventID:     "event-request-confirmed-1",
+		EventType:   EventTypeRequestConfirmed,
+		RequestID:   "request-confirmed-1",
+		PassengerID: "passenger-confirmed-1",
+		DriverID:    "driver-confirmed-1",
+	}
+
+	require.NoError(t, processor.Handle(ctx, event))
+
+	var passengerCount int
+	err := testPool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+		event.PassengerID,
+		string(entity.TypeRequestConfirmed),
+	).Scan(&passengerCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, passengerCount)
+
+	var driverCount int
+	err = testPool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+		event.DriverID,
+		string(entity.TypeRequestConfirmed),
+	).Scan(&driverCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, driverCount)
+}
+
+func TestProcessor_CreatesRequestRejectedNotificationForPassenger(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	processor := newTestProcessor()
+
+	event := TripPublished{
+		EventID:     "event-request-rejected-1",
+		EventType:   EventTypeRequestRejected,
+		RequestID:   "request-rejected-1",
+		PassengerID: "passenger-rejected-1",
+	}
+
+	require.NoError(t, processor.Handle(ctx, event))
+
+	var count int
+	err := testPool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+		event.PassengerID,
+		string(entity.TypeRequestRejected),
+	).Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+}
+
+func TestProcessor_CreatesRequestCompletedNotification(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	processor := newTestProcessor()
+
+	event := TripPublished{
+		EventID:     "event-request-completed-1",
+		EventType:   EventTypeRequestCompleted,
+		RequestID:   "request-1",
+		PassengerID: "passenger-completed-1",
+		TripID:      "trip-completed-req",
+	}
+
+	require.NoError(t, processor.Handle(ctx, event))
+
+	var count int
+	err := testPool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+		event.PassengerID,
+		string(entity.TypeRequestCompleted),
+	).Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+}
+
+func TestProcessor_CreatesRequestExpiredNotification(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	processor := newTestProcessor()
+
+	event := TripPublished{
+		EventID:     "event-request-expired-1",
+		EventType:   EventTypeRequestExpired,
+		RequestID:   "request-expired-1",
+		PassengerID: "passenger-expired-1",
+	}
+
+	require.NoError(t, processor.Handle(ctx, event))
+
+	var count int
+	err := testPool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+		event.PassengerID,
+		string(entity.TypeRequestExpired),
+	).Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+}
+
+func TestProcessor_CreatesTripPublishNotificatedForPassengers(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	processor := newTestProcessor()
+
+	event := TripPublished{
+		EventID:      "event-publish-notified-1",
+		EventType:    EventTypeTripPublishNotificated,
+		TripID:       "trip-notified-1",
+		DriverID:     "driver-notified-1",
+		FromPoint:    "Moscow",
+		ToPoint:      "Kazan",
+		PassengerIDs: []string{"passenger-match-1"},
+	}
+
+	require.NoError(t, processor.Handle(ctx, event))
+
+	var passengerCount int
+	err := testPool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+		"passenger-match-1",
+		string(entity.TypeTripPublishNotificated),
+	).Scan(&passengerCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, passengerCount)
+
+	var driverCount int
+	err = testPool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM notifications WHERE recipient_id = $1 AND type = $2`,
+		event.DriverID,
+		string(entity.TypeTripPublishNotificated),
+	).Scan(&driverCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, driverCount)
 }
 
 func TestProcessor_RequiresEventID(t *testing.T) {

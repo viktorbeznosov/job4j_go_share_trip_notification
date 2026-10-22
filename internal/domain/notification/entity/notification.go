@@ -18,9 +18,17 @@ const (
 type Type string
 
 const (
-	TypeTripPublished Type = "trip_published"
-	TypeTripCreated   Type = "trip_created"
-	TypeTripStarted   Type = "trip_started"
+	TypeTripPublished          Type = "trip_published"
+	TypeTripCreated            Type = "trip_created"
+	TypeTripStarted            Type = "trip_started"
+	TypeTripPreapproved        Type = "trip_preapproved"
+	TypeTripCanceled           Type = "trip_canceled"
+	TypeTripPublishNotificated Type = "trip_publish_notificated"
+	TypeRequestPreconfirmed    Type = "request_preconfirmed"
+	TypeRequestConfirmed       Type = "request_confirmed"
+	TypeRequestRejected        Type = "request_rejected"
+	TypeRequestCompleted       Type = "request_completed"
+	TypeRequestExpired         Type = "request_expired"
 )
 
 type Notification struct {
@@ -44,9 +52,17 @@ func NewNotification(recipientID string, notificationType Type, payload json.Raw
 }
 
 var ValidTypes = map[Type]bool{
-	TypeTripPublished: true,
-	TypeTripCreated:   true,
-	TypeTripStarted:   true,
+	TypeTripPublished:          true,
+	TypeTripCreated:            true,
+	TypeTripStarted:            true,
+	TypeTripPreapproved:        true,
+	TypeTripCanceled:           true,
+	TypeTripPublishNotificated: true,
+	TypeRequestPreconfirmed:    true,
+	TypeRequestConfirmed:       true,
+	TypeRequestRejected:        true,
+	TypeRequestCompleted:       true,
+	TypeRequestExpired:         true,
 }
 
 func (t Type) IsValid() bool {

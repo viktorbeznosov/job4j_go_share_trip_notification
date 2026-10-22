@@ -28,5 +28,10 @@ func TestTypeIsValid(t *testing.T) {
 
 	assert.True(t, TypeTripPublished.IsValid())
 	assert.True(t, TypeTripStarted.IsValid())
+	assert.True(t, TypeTripPreapproved.IsValid())
+	assert.True(t, TypeTripCanceled.IsValid())
+	assert.True(t, TypeTripPublishNotificated.IsValid())
+	assert.True(t, TypeRequestCompleted.IsValid())
+	assert.True(t, TypeRequestExpired.IsValid())
 	assert.False(t, Type("unknown").IsValid())
 }

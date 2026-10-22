@@ -13,8 +13,16 @@ import (
 type EventType string
 
 const (
-	EventTypeTripPublished EventType = "trip_published"
-	EventTypeTripStarted   EventType = "trip_started"
+	EventTypeTripPublished          EventType = "trip_published"
+	EventTypeTripStarted            EventType = "trip_started"
+	EventTypeTripPreapproved        EventType = "trip_preapproved"
+	EventTypeTripCanceled           EventType = "trip_canceled"
+	EventTypeTripPublishNotificated EventType = "trip_publish_notificated"
+	EventTypeRequestPreconfirmed    EventType = "request_preconfirmed"
+	EventTypeRequestConfirmed       EventType = "request_confirmed"
+	EventTypeRequestRejected        EventType = "request_rejected"
+	EventTypeRequestCompleted       EventType = "request_completed"
+	EventTypeRequestExpired         EventType = "request_expired"
 )
 
 type TripPublished struct {
@@ -23,6 +31,13 @@ type TripPublished struct {
 	TripID        string    `json:"trip_id"`
 	DriverID      string    `json:"driver_id"`
 	CompanyID     string    `json:"company_id"`
+	RequestID     string    `json:"request_id,omitempty"`
+	PassengerID   string    `json:"passenger_id,omitempty"`
+	PassengerIDs  []string  `json:"passenger_ids,omitempty"`
+	RequestIDs    []string  `json:"request_ids,omitempty"`
+	FromPoint     string    `json:"from_point,omitempty"`
+	ToPoint       string    `json:"to_point,omitempty"`
+	DepartureTime time.Time `json:"departure_time,omitempty"`
 	CorrelationID string    `json:"correlation_id,omitempty"`
 	CausationID   string    `json:"causation_id,omitempty"`
 	Traceparent   string    `json:"traceparent,omitempty"`
@@ -89,7 +104,7 @@ func (c *Consumer) process(
 
 	applyMetadata(&event, metadataFromHeaders(msg))
 
-	if event.EventType != EventTypeTripPublished && event.EventType != EventTypeTripStarted {
+	if !supportedEventType(event.EventType) {
 		slog.Info("skip unsupported event type",
 			slog.String("service", "notification"),
 			slog.String("operation", "ConsumeTripEvent"),
@@ -145,11 +160,47 @@ func (c *Consumer) Close() error {
 	return c.reader.Close()
 }
 
-func consumeOperation(eventType EventType) string {
-	if eventType == EventTypeTripStarted {
-		return "ConsumeTripStarted"
+func supportedEventType(eventType EventType) bool {
+	switch eventType {
+	case EventTypeTripPublished,
+		EventTypeTripStarted,
+		EventTypeTripPreapproved,
+		EventTypeTripCanceled,
+		EventTypeTripPublishNotificated,
+		EventTypeRequestPreconfirmed,
+		EventTypeRequestConfirmed,
+		EventTypeRequestRejected,
+		EventTypeRequestCompleted,
+		EventTypeRequestExpired:
+		return true
+	default:
+		return false
 	}
-	return "ConsumeTripPublished"
+}
+
+func consumeOperation(eventType EventType) string {
+	switch eventType {
+	case EventTypeTripStarted:
+		return "ConsumeTripStarted"
+	case EventTypeTripPreapproved:
+		return "ConsumeTripPreapproved"
+	case EventTypeTripCanceled:
+		return "ConsumeTripCanceled"
+	case EventTypeTripPublishNotificated:
+		return "ConsumeTripPublishNotificated"
+	case EventTypeRequestPreconfirmed:
+		return "ConsumeRequestPreconfirmed"
+	case EventTypeRequestConfirmed:
+		return "ConsumeRequestConfirmed"
+	case EventTypeRequestRejected:
+		return "ConsumeRequestRejected"
+	case EventTypeRequestCompleted:
+		return "ConsumeRequestCompleted"
+	case EventTypeRequestExpired:
+		return "ConsumeRequestExpired"
+	default:
+		return "ConsumeTripPublished"
+	}
 }
 
 func sleep(ctx context.Context, d time.Duration) bool {

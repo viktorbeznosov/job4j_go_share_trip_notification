@@ -49,25 +49,18 @@ func (p *Processor) Handle(ctx context.Context, event TripPublished) error {
 		result = "error"
 		return fmt.Errorf("missing event_id")
 	}
-	if event.DriverID == "" {
+	if err := validateEvent(event); err != nil {
 		result = "error"
-		return fmt.Errorf("missing driver_id")
+		return err
 	}
 
-	payload, err := json.Marshal(map[string]any{
-		"event_id":       event.EventID,
-		"trip_id":        event.TripID,
-		"driver_id":      event.DriverID,
-		"company_id":     event.CompanyID,
-		"correlation_id": event.CorrelationID,
-		"causation_id":   event.CausationID,
-		"traceparent":    event.Traceparent,
-		"occurred_at":    event.OccurredAt,
-	})
+	payload, err := json.Marshal(event)
 	if err != nil {
 		result = "error"
 		return fmt.Errorf("marshal payload: %w", err)
 	}
+
+	recipients, notificationType := recipientsFor(event)
 
 	err = storage.TxWithoutResult(ctx, p.pool, func(tx pgx.Tx) error {
 		inserted, err := p.processedEvents.TryInsert(ctx, tx, event.EventID)
@@ -98,33 +91,30 @@ func (p *Processor) Handle(ctx context.Context, event TripPublished) error {
 			slog.String("result", "created"),
 		)
 
-		notificationType := entity.TypeTripPublished
-		if event.EventType == EventTypeTripStarted {
-			notificationType = entity.TypeTripStarted
+		for _, recipientID := range recipients {
+			notification := entity.NewNotification(
+				recipientID,
+				notificationType,
+				payload,
+			)
+			if err := p.notifications.CreateTx(ctx, tx, notification); err != nil {
+				p.metrics.SendTotal.WithLabelValues("error").Inc()
+				return err
+			}
+			p.metrics.SendTotal.WithLabelValues("success").Inc()
+			slog.Info("notification sent",
+				slog.String("service", "notification"),
+				slog.String("operation", "SendNotification"),
+				slog.String("event_id", event.EventID),
+				slog.String("correlation_id", event.CorrelationID),
+				slog.String("causation_id", event.CausationID),
+				slog.String("trace_id", TraceIDFromParent(event.Traceparent)),
+				slog.String("trip_id", event.TripID),
+				slog.String("notification_id", notification.ID.String()),
+				slog.String("recipient_id", recipientID),
+				slog.String("result", "sent"),
+			)
 		}
-
-		notification := entity.NewNotification(
-			event.DriverID,
-			notificationType,
-			payload,
-		)
-		if err := p.notifications.CreateTx(ctx, tx, notification); err != nil {
-			p.metrics.SendTotal.WithLabelValues("error").Inc()
-			return err
-		}
-
-		p.metrics.SendTotal.WithLabelValues("success").Inc()
-		slog.Info("notification sent",
-			slog.String("service", "notification"),
-			slog.String("operation", "SendNotification"),
-			slog.String("event_id", event.EventID),
-			slog.String("correlation_id", event.CorrelationID),
-			slog.String("causation_id", event.CausationID),
-			slog.String("trace_id", TraceIDFromParent(event.Traceparent)),
-			slog.String("trip_id", event.TripID),
-			slog.String("notification_id", notification.ID.String()),
-			slog.String("result", "sent"),
-		)
 
 		return nil
 	})
@@ -132,4 +122,65 @@ func (p *Processor) Handle(ctx context.Context, event TripPublished) error {
 		result = "error"
 	}
 	return err
+}
+
+func validateEvent(event TripPublished) error {
+	switch event.EventType {
+	case EventTypeRequestCompleted, EventTypeRequestExpired, EventTypeRequestConfirmed, EventTypeRequestRejected:
+		if event.PassengerID == "" {
+			return fmt.Errorf("missing passenger_id")
+		}
+	case EventTypeRequestPreconfirmed:
+		if event.DriverID == "" {
+			return fmt.Errorf("missing driver_id")
+		}
+	case EventTypeTripCanceled, EventTypeTripPublishNotificated:
+		return nil
+	default:
+		if event.DriverID == "" {
+			return fmt.Errorf("missing driver_id")
+		}
+	}
+	return nil
+}
+
+func recipientsFor(event TripPublished) ([]string, entity.Type) {
+	switch event.EventType {
+	case EventTypeTripStarted:
+		return []string{event.DriverID}, entity.TypeTripStarted
+	case EventTypeTripPreapproved:
+		return []string{event.DriverID}, entity.TypeTripPreapproved
+	case EventTypeTripCanceled:
+		return uniqueNonEmpty(event.PassengerIDs), entity.TypeTripCanceled
+	case EventTypeTripPublishNotificated:
+		return uniqueNonEmpty(event.PassengerIDs), entity.TypeTripPublishNotificated
+	case EventTypeRequestPreconfirmed:
+		return []string{event.DriverID}, entity.TypeRequestPreconfirmed
+	case EventTypeRequestConfirmed:
+		return []string{event.PassengerID}, entity.TypeRequestConfirmed
+	case EventTypeRequestRejected:
+		return []string{event.PassengerID}, entity.TypeRequestRejected
+	case EventTypeRequestCompleted:
+		return []string{event.PassengerID}, entity.TypeRequestCompleted
+	case EventTypeRequestExpired:
+		return []string{event.PassengerID}, entity.TypeRequestExpired
+	default:
+		return []string{event.DriverID}, entity.TypeTripPublished
+	}
+}
+
+func uniqueNonEmpty(ids []string) []string {
+	seen := make(map[string]struct{}, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }

@@ -114,11 +114,40 @@ func TestConsumer_AppliesKafkaHeadersToEvent(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
+func TestConsumer_HandlesTripCanceled(t *testing.T) {
+	t.Parallel()
+	event := TripPublished{
+		EventID:      "evt-canceled",
+		EventType:    EventTypeTripCanceled,
+		TripID:       "trip-canceled",
+		PassengerIDs: []string{"p-1"},
+	}
+	body, err := json.Marshal(event)
+	require.NoError(t, err)
+
+	reader := &stubReader{messages: []kafka.Message{{Value: body}}}
+	consumer := &Consumer{reader: reader}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	handled := 0
+	err = consumer.Run(ctx, func(_ context.Context, got TripPublished) error {
+		handled++
+		assert.Equal(t, EventTypeTripCanceled, got.EventType)
+		return nil
+	})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Equal(t, 1, handled)
+	require.Len(t, reader.commits, 1)
+}
+
 func TestConsumer_SkipsNonTripPublishedAndCommits(t *testing.T) {
 	t.Parallel()
 	event := TripPublished{
 		EventID:   "evt-2",
-		EventType: EventType("trip_cancelled"),
+		EventType: EventType("trip_created"),
 		TripID:    "trip-2",
 	}
 	body, err := json.Marshal(event)
@@ -140,6 +169,38 @@ func TestConsumer_SkipsNonTripPublishedAndCommits(t *testing.T) {
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 	assert.Equal(t, 0, handled)
+	require.Len(t, reader.commits, 1)
+}
+
+func TestConsumer_HandlesTripPreapproved(t *testing.T) {
+	t.Parallel()
+	event := TripPublished{
+		EventID:   "evt-preapproved",
+		EventType: EventTypeTripPreapproved,
+		TripID:    "trip-preapproved",
+		DriverID:  "driver-preapproved",
+	}
+	body, err := json.Marshal(event)
+	require.NoError(t, err)
+
+	reader := &stubReader{
+		messages: []kafka.Message{{Value: body}},
+	}
+	consumer := &Consumer{reader: reader}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	handled := 0
+	err = consumer.Run(ctx, func(_ context.Context, got TripPublished) error {
+		handled++
+		assert.Equal(t, EventTypeTripPreapproved, got.EventType)
+		assert.Equal(t, "evt-preapproved", got.EventID)
+		return nil
+	})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Equal(t, 1, handled)
 	require.Len(t, reader.commits, 1)
 }
 
